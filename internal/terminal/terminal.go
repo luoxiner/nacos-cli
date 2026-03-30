@@ -499,7 +499,7 @@ func (t *Terminal) listSkills(args []string) {
 			"totalCount": totalCount,
 			"page":       page,
 			"size":       size,
-			"items":      skills,
+			"items":      listformat.SkillItems(skills),
 		}
 		data, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
@@ -1091,7 +1091,7 @@ func (t *Terminal) listAgentSpecs(args []string) {
 			"totalCount": totalCount,
 			"page":       page,
 			"size":       size,
-			"items":      specs,
+			"items":      listformat.AgentSpecItems(specs),
 		}
 		data, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {

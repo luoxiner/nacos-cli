@@ -40,7 +40,7 @@ var listAgentSpecCmd = &cobra.Command{
 				"totalCount": totalCount,
 				"page":       agentSpecListPage,
 				"size":       agentSpecListSize,
-				"items":      specs,
+				"items":      listformat.AgentSpecItems(specs),
 			}))
 			return
 		}

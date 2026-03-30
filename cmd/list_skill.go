@@ -40,7 +40,7 @@ var listSkillCmd = &cobra.Command{
 				"totalCount": totalCount,
 				"page":       skillListPage,
 				"size":       skillListSize,
-				"items":      skills,
+				"items":      listformat.SkillItems(skills),
 			}))
 			return
 		}
