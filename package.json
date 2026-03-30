@@ -1,6 +1,6 @@
 {
   "name": "@nacos-group/cli",
-  "version": "0.0.12-beta.3",
+  "version": "1.0.0",
   "description": "A command-line tool for managing Nacos configurations and AI skills",
   "bin": {
     "nacos-cli": "./bin/cli.js"
