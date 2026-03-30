@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,10 +12,9 @@ import (
 	"github.com/nacos-group/nacos-cli/internal/agentspec"
 	"github.com/nacos-group/nacos-cli/internal/client"
 	"github.com/nacos-group/nacos-cli/internal/help"
+	"github.com/nacos-group/nacos-cli/internal/listformat"
 	"github.com/nacos-group/nacos-cli/internal/skill"
 )
-
-const defaultDescLimit = 200
 
 // Terminal represents an interactive terminal
 type Terminal struct {
@@ -188,6 +188,7 @@ func (t *Terminal) printWelcome() {
 // For example: "skill-get my-skill --label latest -o /path" should recognize:
 //   - skill name: my-skill
 //   - flags: --label latest, -o /path
+//
 // This prevents flags and their values from being treated as additional skill names
 func parseCommandArgs(input string) (cmd string, args []string) {
 	parts := strings.Fields(input)
@@ -201,7 +202,7 @@ func parseCommandArgs(input string) (cmd string, args []string) {
 	// Parse remaining parts, handling flags properly
 	for i := 1; i < len(parts); i++ {
 		arg := parts[i]
-		
+
 		// Check if this is a flag
 		if strings.HasPrefix(arg, "-") {
 			args = append(args, arg)
@@ -211,7 +212,7 @@ func parseCommandArgs(input string) (cmd string, args []string) {
 				"--help": true, "-h": true,
 				"--all": true,
 			}
-			
+
 			// If it's a long flag (--flag), check if value is separate
 			if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") {
 				if !booleanFlags[arg] && i+1 < len(parts) && !strings.HasPrefix(parts[i+1], "-") {
@@ -325,7 +326,7 @@ func (t *Terminal) showHelp() {
 	// Skill Management
 	fmt.Println("\033[1;33mSkill Management\033[0m")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "skill-list", "List all skills", "skill-list [options]")
-	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "", "Options: --name, --page, --size", "")
+	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "", "Options: --name, --page, --size, --format", "")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "skill-get", "Download a skill to ~/.skills", "skill-get <name> [--version v1] [--label stable]")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "skill-publish", "Publish a skill from local", "skill-publish <path>")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "", "Publish all skills in directory", "skill-publish --all <folder>")
@@ -334,7 +335,7 @@ func (t *Terminal) showHelp() {
 	// AgentSpec Management
 	fmt.Println("\033[1;33mAgentSpec Management\033[0m")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "agentspec-list", "List all agent specs", "agentspec-list [options]")
-	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "", "Options: --name, --page, --size", "")
+	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "", "Options: --name, --page, --size, --format", "")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "agentspec-get", "Download an agent spec to ~/.agentspecs", "agentspec-get <name> [--version v1] [--label stable]")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "agentspec-publish", "Publish an agent spec from local", "agentspec-publish <path>")
 	fmt.Printf("\033[32m%-20s\033[0m %-40s %-30s\n", "", "Publish all agent specs in directory", "agentspec-publish --all <folder>")
@@ -433,6 +434,7 @@ func (t *Terminal) listSkills(args []string) {
 	// Parse flags
 	var name string
 	var page, size int = 1, 20
+	format := listformat.FormatText
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -466,7 +468,20 @@ func (t *Terminal) listSkills(args []string) {
 		} else if arg == "--size=" && i+1 < len(args) {
 			i++
 			fmt.Sscanf(args[i], "%d", &size)
+		} else if strings.HasPrefix(arg, "--format=") {
+			format = strings.TrimPrefix(arg, "--format=")
+		} else if arg == "--format" && i+1 < len(args) {
+			i++
+			format = args[i]
+		} else if arg == "--format=" && i+1 < len(args) {
+			i++
+			format = args[i]
 		}
+	}
+
+	if err := listformat.ValidateFormat(format); err != nil {
+		fmt.Printf("\033[31mError:\033[0m %v\n", err)
+		return
 	}
 
 	fmt.Print("\033[90mFetching skills...\033[0m\r")
@@ -478,6 +493,22 @@ func (t *Terminal) listSkills(args []string) {
 	}
 
 	fmt.Print("\033[K") // Clear line
+
+	if listformat.NormalizeFormat(format) == listformat.FormatJSON {
+		payload := map[string]interface{}{
+			"totalCount": totalCount,
+			"page":       page,
+			"size":       size,
+			"items":      skills,
+		}
+		data, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			fmt.Printf("\033[31mError:\033[0m %v\n", err)
+			return
+		}
+		fmt.Println(string(data))
+		return
+	}
 
 	if len(skills) == 0 {
 		totalPages := (totalCount + size - 1) / size
@@ -493,7 +524,7 @@ func (t *Terminal) listSkills(args []string) {
 	fmt.Println("\033[36m═══════════════════════════════════════════════════════════════════════════════\033[0m")
 	for i, skill := range skills {
 		if skill.Description != "" {
-			desc := truncateDesc(skill.Description, defaultDescLimit)
+			desc := listformat.TruncateDesc(skill.Description, listformat.DefaultDescLimit)
 			fmt.Printf("\033[90m%3d.\033[0m \033[32m%s\033[0m \033[90m- %s\033[0m\n", (page-1)*size+i+1, skill.Name, desc)
 		} else {
 			fmt.Printf("\033[90m%3d.\033[0m \033[32m%s\033[0m\n", (page-1)*size+i+1, skill.Name)
@@ -515,7 +546,7 @@ func (t *Terminal) getSkill(args []string) {
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		
+
 		if arg == "--version" && i+1 < len(args) {
 			i++
 			version = args[i]
@@ -1007,6 +1038,7 @@ func (t *Terminal) listAgentSpecs(args []string) {
 	// Parse flags
 	var name string
 	var page, size int = 1, 20
+	format := listformat.FormatText
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -1031,7 +1063,17 @@ func (t *Terminal) listAgentSpecs(args []string) {
 		} else if arg == "--size" && i+1 < len(args) {
 			i++
 			fmt.Sscanf(args[i], "%d", &size)
+		} else if strings.HasPrefix(arg, "--format=") {
+			format = strings.TrimPrefix(arg, "--format=")
+		} else if arg == "--format" && i+1 < len(args) {
+			i++
+			format = args[i]
 		}
+	}
+
+	if err := listformat.ValidateFormat(format); err != nil {
+		fmt.Printf("\033[31mError:\033[0m %v\n", err)
+		return
 	}
 
 	fmt.Print("\033[90mFetching agent specs...\033[0m\r")
@@ -1043,6 +1085,22 @@ func (t *Terminal) listAgentSpecs(args []string) {
 	}
 
 	fmt.Print("\033[K") // Clear line
+
+	if listformat.NormalizeFormat(format) == listformat.FormatJSON {
+		payload := map[string]interface{}{
+			"totalCount": totalCount,
+			"page":       page,
+			"size":       size,
+			"items":      specs,
+		}
+		data, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			fmt.Printf("\033[31mError:\033[0m %v\n", err)
+			return
+		}
+		fmt.Println(string(data))
+		return
+	}
 
 	if len(specs) == 0 {
 		totalPages := (totalCount + size - 1) / size
@@ -1062,7 +1120,7 @@ func (t *Terminal) listAgentSpecs(args []string) {
 			enableStr = "\033[31mdisabled\033[0m"
 		}
 		if spec.Description != nil && *spec.Description != "" {
-			desc := truncateDesc(*spec.Description, defaultDescLimit)
+			desc := listformat.TruncateDesc(*spec.Description, listformat.DefaultDescLimit)
 			fmt.Printf("\033[90m%3d.\033[0m \033[32m%s\033[0m \033[90m- %s\033[0m [%s, \033[90monline:%d\033[0m]\n", (page-1)*size+i+1, spec.Name, desc, enableStr, spec.OnlineCnt)
 		} else {
 			fmt.Printf("\033[90m%3d.\033[0m \033[32m%s\033[0m [%s, \033[90monline:%d\033[0m]\n", (page-1)*size+i+1, spec.Name, enableStr, spec.OnlineCnt)
@@ -1084,7 +1142,7 @@ func (t *Terminal) getAgentSpec(args []string) {
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		
+
 		if arg == "--version" && i+1 < len(args) {
 			i++
 			version = args[i]

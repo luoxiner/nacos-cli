@@ -22,6 +22,7 @@ var (
 			"--name string   Filter by skill name (supports wildcard *)",
 			"--page int      Page number (default: 1)",
 			"--size int      Page size (default: 20)",
+			"--format string Output format: text or json (default: text)",
 		},
 		Examples: []string{
 			"# List all skills",
@@ -32,6 +33,9 @@ var (
 			"",
 			"# With pagination",
 			"skill-list --page 2 --size 10",
+			"",
+			"# Output JSON",
+			"skill-list --format json",
 		},
 	}
 
@@ -156,6 +160,7 @@ var (
 			"--name string     Filter by agent spec name",
 			"--page int        Page number (default: 1)",
 			"--size int        Page size (default: 20)",
+			"--format string   Output format: text or json (default: text)",
 		},
 		Examples: []string{
 			"# List all agent specs",
@@ -166,6 +171,9 @@ var (
 			"",
 			"# With pagination",
 			"agentspec-list --page 2 --size 10",
+			"",
+			"# Output JSON",
+			"agentspec-list --format json",
 		},
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/nacos-group/nacos-cli/internal/agentspec"
 	"github.com/nacos-group/nacos-cli/internal/help"
+	"github.com/nacos-group/nacos-cli/internal/listformat"
 	"github.com/nacos-group/nacos-cli/internal/util"
 	"github.com/spf13/cobra"
 )
@@ -14,6 +15,7 @@ var (
 	agentSpecListPage   int
 	agentSpecListSize   int
 	agentSpecListName   string
+	agentSpecListFormat string
 )
 
 var listAgentSpecCmd = &cobra.Command{
@@ -21,6 +23,8 @@ var listAgentSpecCmd = &cobra.Command{
 	Short: "List all agent specs",
 	Long:  help.AgentSpecList.FormatForCLI("nacos-cli"),
 	Run: func(cmd *cobra.Command, args []string) {
+		checkError(listformat.ValidateFormat(agentSpecListFormat))
+
 		// Create Nacos client
 		nacosClient := mustNewNacosClient()
 
@@ -30,6 +34,16 @@ var listAgentSpecCmd = &cobra.Command{
 		// List agent specs
 		specs, totalCount, err := agentSpecService.ListAgentSpecs(agentSpecListName, "", agentSpecListPage, agentSpecListSize)
 		checkError(err)
+
+		if listformat.NormalizeFormat(agentSpecListFormat) == listformat.FormatJSON {
+			checkError(listformat.WriteJSON(os.Stdout, map[string]interface{}{
+				"totalCount": totalCount,
+				"page":       agentSpecListPage,
+				"size":       agentSpecListSize,
+				"items":      specs,
+			}))
+			return
+		}
 
 		// Display results
 		if len(specs) == 0 {
@@ -48,7 +62,7 @@ var listAgentSpecCmd = &cobra.Command{
 				enableStr = "disabled"
 			}
 			if spec.Description != nil && *spec.Description != "" {
-				desc := truncateDesc(*spec.Description, defaultDescLimit)
+				desc := listformat.TruncateDesc(*spec.Description, listformat.DefaultDescLimit)
 				fmt.Printf("%3d. %s - %s [%s, online:%d]\n", i+1, spec.Name, desc, enableStr, spec.OnlineCnt)
 			} else {
 				fmt.Printf("%3d. %s [%s, online:%d]\n", i+1, spec.Name, enableStr, spec.OnlineCnt)
@@ -61,5 +75,6 @@ func init() {
 	listAgentSpecCmd.Flags().IntVar(&agentSpecListPage, "page", 1, "Page number (default: 1)")
 	listAgentSpecCmd.Flags().IntVar(&agentSpecListSize, "size", 20, "Page size (default: 20)")
 	listAgentSpecCmd.Flags().StringVar(&agentSpecListName, "name", "", "Filter by agent spec name")
+	listAgentSpecCmd.Flags().StringVar(&agentSpecListFormat, "format", listformat.FormatText, "Output format: text or json")
 	rootCmd.AddCommand(listAgentSpecCmd)
 }
